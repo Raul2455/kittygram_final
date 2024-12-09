@@ -40,4 +40,8 @@ services:
       - media:/staticfiles/media
     depends_on:
       - backend
+<<<<<<< HEAD
       - frontend
+=======
+      - frontend
+>>>>>>> 35ec28275cc4c76247551ea4b09e359c99d2429d
