@@ -6,7 +6,7 @@ on:
       - master
 
 jobs:
-  deploy:
+  pull_images:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repo
@@ -22,7 +22,7 @@ jobs:
         source: "docker-compose.production.yml"
         target: "kittygram"
 
-    - name: Executing remote ssh commands to deploy
+    - name: Pull Docker images
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.HOST }}
@@ -32,67 +32,72 @@ jobs:
         script: |
           set -e
           cd kittygram
-          
           echo "Pulling images..."
           sudo docker compose -f docker-compose.production.yml pull || echo "Failed to pull images"
 
+  restart_services:
+    runs-on: ubuntu-latest
+    needs: pull_images
+    steps:
+    - name: Stop old services
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script: |
+          set -e
+          cd kittygram
           echo "Stopping old services..."
           sudo docker compose -f docker-compose.production.yml down || echo "Failed to stop services"
 
+    - name: Start new services
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script: |
+          set -e
+          cd kittygram
           echo "Starting new services..."
           sudo docker compose -f docker-compose.production.yml up -d || echo "Failed to start services"
 
-          echo "Checking backend logs..."
-          sudo docker logs kittygram-backend-1 || echo "Failed to get logs"
-
+  run_migrations:
+    runs-on: ubuntu-latest
+    needs: restart_services
+    steps:
+    - name: Run migrations
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script: |
+          set -e
+          cd kittygram
           echo "Running migrations..."
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py migrate || echo "Migration failed"
 
+    - name: Collect static files
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script: |
+          set -e
+          cd kittygram
           echo "Collecting static files..."
           sudo docker compose -f docker-compose.production.yml exec backend python manage.py collectstatic --noinput || echo "Collectstatic failed"
 
-    - name: Get backend logs
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USER }}
-        key: ${{ secrets.SSH_KEY }}
-        passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        script: |
-          echo "Fetching backend logs..."
-          sudo docker logs kittygram-backend-1 || echo "Failed to get backend logs"
-
-    - name: Check backend container status
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USER }}
-        key: ${{ secrets.SSH_KEY }}
-        passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        script: |
-          echo "Checking container status..."
-          sudo docker ps -a
-          if [ $(sudo docker inspect -f '{{.State.Running}}' kittygram-backend-1) == "false" ]; then
-            echo "Backend service failed to start. Fetching logs..."
-            sudo docker logs kittygram-backend-1
-            exit 1
-          fi
-          
-    - name: List running containers and their status
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USER }}
-        key: ${{ secrets.SSH_KEY }}
-        passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        script: |
-          echo "Listing containers..."
-          sudo docker ps -a
-          sudo docker-compose -f docker-compose.production.yml ps
-
   send_message:
     runs-on: ubuntu-latest
-    needs: deploy
+    needs: run_migrations
     steps:
     - name: Send message
       uses: appleboy/telegram-action@master
@@ -100,5 +105,6 @@ jobs:
         to: ${{ secrets.TELEGRAM_TO }}
         token: ${{ secrets.TELEGRAM_TOKEN }}
         message: |
-          Деплой выполнен! Проверьте статус контейнеров.
-
+          Деплой выполнен!
+          Пользователь: ${{ github.actor }}
+          Сообщение коммита: ${{ github.event.commits[0].message }}

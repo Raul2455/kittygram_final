@@ -2,7 +2,6 @@ volumes:
   pg_data:
   static:
   media:
-  user_uploads:
 
 services:
   db:
@@ -15,21 +14,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
   backend:
     image: raul2455/kittygram_backend:latest
     env_file: .env
     volumes:
       - static:/backend_static
-      - media:/app/media
+      - media:/media  # Исправлено для соответствия конфигурации Nginx
     depends_on:
       db:
         condition: service_healthy
+
   frontend:
     env_file: .env
     image: raul2455/kittygram_frontend:latest
     command: cp -r /app/build/. /frontend_static/
     volumes:
       - static:/frontend_static
+
   gateway:
     image: raul2455/kittygram_gateway:latest
     env_file: .env
@@ -37,6 +39,6 @@ services:
       - 9000:80
     volumes:
       - static:/staticfiles/
-      - media:/staticfiles/media
+      - media:/media  # Исправлено для соответствия конфигурации Nginx
     depends_on:
       - backend

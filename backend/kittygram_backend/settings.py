@@ -3,12 +3,14 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from django.core.management.utils import get_random_secret_key
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = f'{os.getenv("SECRET_KEY")}'
+SECRET_KEY = os.getenv("SECRET_KEY", get_random_secret_key())
+
 DEBUG = os.getenv("DEBUG") == "True"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", '').split(',')
 
@@ -99,7 +101,7 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'collected_static'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -114,5 +116,4 @@ REST_FRAMEWORK = {
 
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
-
 }
